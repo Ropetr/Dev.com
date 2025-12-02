@@ -2,7 +2,7 @@
 # DEV.com Orchestrator - Cloudflare Workers Configuration
 # ============================================================================
 
-name = "DEVcom-orchestrator"
+name = "devcom-orchestrator"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
