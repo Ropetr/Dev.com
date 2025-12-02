@@ -11,13 +11,10 @@ compatibility_flags = ["nodejs_compat"]
 account_id = "f14d821b52a4f6ecbad7fb0e0afba8e5"
 
 # ============================================================================
-# Workers AI (via AI Gateway)
+# Workers AI
 # ============================================================================
 [ai]
 binding = "AI"
-
-# AI Gateway endpoint
-# https://gateway.ai.cloudflare.com/v1/f14d821b52a4f6ecbad7fb0e0afba8e5/devcom-ai-gateway
 
 # ============================================================================
 # D1 Database
@@ -46,28 +43,10 @@ id = "5706642392dc4af1ba7eef4a3a0e2322"
 # ============================================================================
 [durable_objects]
 bindings = [
-  { name = "ORCHESTRATOR_DO", class_name = "OrchestratorDO" },
-  { name = "AGENT_DO", class_name = "AgentDO" }
+  { name = "ORCHESTRATOR", class_name = "OrchestratorDO" },
+  { name = "AGENT", class_name = "AgentDO" }
 ]
 
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["OrchestratorDO", "AgentDO"]
-
-# ============================================================================
-# Environment Variables
-# ============================================================================
-[vars]
-ENVIRONMENT = "development"
-
-# ============================================================================
-# Secrets (configure via wrangler secret put)
-# ============================================================================
-# GITHUB_TOKEN = "..."
-
-# ============================================================================
-# Development
-# ============================================================================
-[dev]
-port = 8787
-local_protocol = "http"
+new_classes = ["OrchestratorDO", "AgentDO"]
