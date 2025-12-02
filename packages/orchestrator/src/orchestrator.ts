@@ -1,359 +1,296 @@
 // ============================================================================
-// DEV.com Orchestrator Durable Object
-// O "CEO/Moderador" que coordena todos os agentes
+// DEV.com - Orchestrator Durable Object
 // ============================================================================
 
 import { DurableObject } from 'cloudflare:workers';
-import type { Env, Mesa, EspecialistaId, OrchestratorOutput, ContribuicaoEspecialista } from '@dev.com/shared/types';
-import { ESPECIALISTAS_MAP, MESAS_TEMPLATES, getMesaTemplate } from '@dev.com/shared/especialistas';
+import { Env, Mesa, Mensagem, ESPECIALISTAS_MAP, CULTURA_EQUIPE, CHECKPOINTS } from '@dev.com/shared';
 
-interface OrchestratorState {
-  conversas: Map<string, any[]>;
-  mesasAtivas: Map<string, Mesa>;
-  projetoAtual?: string;
+interface ConversaState {
+  mensagens: Mensagem[];
+  mesa?: Mesa;
+  projeto_id?: string;
 }
 
-export class OrchestratorDO extends DurableObject {
-  private state: OrchestratorState = {
-    conversas: new Map(),
-    mesasAtivas: new Map()
-  };
-  
-  private env: Env;
+export class OrchestratorDO extends DurableObject<Env> {
+  private conversas: Map<string, ConversaState> = new Map();
+  private mesasAtivas: Map<string, Mesa> = new Map();
+  private projetoAtual?: string;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.env = env;
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    
-    // WebSocket upgrade
-    if (request.headers.get('Upgrade') === 'websocket') {
-      return this.handleWebSocket(request);
-    }
-    
-    // API routes
-    switch (url.pathname) {
-      case '/chat':
-        return this.handleChat(request);
-      case '/mesa':
-        return this.handleMesa(request);
-      default:
-        return new Response('Not found', { status: 404 });
-    }
-  }
+    const path = url.pathname;
 
-  // ============================================================================
-  // Main Chat Handler
-  // ============================================================================
-  private async handleChat(request: Request): Promise<Response> {
-    const { mensagem, projeto_id, mesa_id } = await request.json() as any;
-    
     try {
-      // Step 1: Analyze the demand and decide which specialists to invoke
-      const analise = await this.analisarDemanda(mensagem);
-      
-      // Step 2: Get or create mesa based on analysis
-      const mesa = mesa_id 
-        ? this.state.mesasAtivas.get(mesa_id)
-        : this.criarMesa(analise.especialistasRecomendados, analise.tipoDemanda);
-      
-      if (!mesa) {
-        return Response.json({ error: 'Mesa não encontrada' }, { status: 404 });
+      if (path === '/chat' && request.method === 'POST') {
+        return this.handleChat(request);
       }
-      
-      // Step 3: Invoke specialists in parallel
-      const contribuicoes = await this.invocarEspecialistas(mesa.especialistas, mensagem, projeto_id);
-      
-      // Step 4: Synthesize responses
-      const respostaFinal = await this.sintetizarRespostas(mensagem, contribuicoes);
-      
-      // Step 5: Build output
-      const output: OrchestratorOutput = {
-        resposta: respostaFinal,
-        mesa_utilizada: mesa,
-        contribuicoes,
-        ferramentas_usadas: [],
-        proximos_passos: this.extrairProximosPassos(respostaFinal)
-      };
-      
-      return Response.json(output);
-      
+
+      if (path === '/mesa' && request.method === 'POST') {
+        return this.handleCriarMesa(request);
+      }
+
+      // WebSocket upgrade
+      if (request.headers.get('Upgrade') === 'websocket') {
+        return this.handleWebSocket(request);
+      }
+
+      return new Response('Not Found', { status: 404 });
     } catch (error) {
-      console.error('Orchestrator error:', error);
-      return Response.json({ 
-        error: 'Erro ao processar mensagem',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      }, { status: 500 });
+      console.error('Erro no Orchestrator:', error);
+      return new Response(JSON.stringify({ error: 'Erro interno' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
   }
 
-  // ============================================================================
-  // Demand Analysis - Decides which specialists to invoke
-  // ============================================================================
-  private async analisarDemanda(mensagem: string): Promise<{
-    tipoDemanda: string;
-    especialistasRecomendados: EspecialistaId[];
+  private async handleChat(request: Request): Promise<Response> {
+    const { mensagem, projeto_id, mesa_id, contexto } = await request.json() as {
+      mensagem: string;
+      projeto_id?: string;
+      mesa_id?: string;
+      contexto?: Record<string, unknown>;
+    };
+
+    // 1. Analisar demanda e identificar especialistas necessários
+    const analise = await this.analisarDemanda(mensagem, contexto);
+
+    // 2. Criar ou recuperar mesa
+    const mesa = mesa_id 
+      ? this.mesasAtivas.get(mesa_id) || await this.criarMesa(analise.especialistas)
+      : await this.criarMesa(analise.especialistas);
+
+    // 3. Invocar especialistas em paralelo
+    const contribuicoes = await this.invocarEspecialistas(mesa, mensagem, contexto);
+
+    // 4. Sintetizar respostas
+    const resposta = await this.sintetizarRespostas(mensagem, contribuicoes, analise);
+
+    // 5. Extrair próximos passos
+    const proximosPassos = await this.extrairProximosPassos(resposta, contribuicoes);
+
+    // 6. Salvar no banco
+    if (projeto_id) {
+      await this.salvarConversa(projeto_id, mensagem, resposta, mesa);
+    }
+
+    return new Response(JSON.stringify({
+      resposta,
+      mesa_utilizada: mesa,
+      contribuicoes,
+      ferramentas_usadas: analise.ferramentas || [],
+      proximos_passos: proximosPassos
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  private async analisarDemanda(mensagem: string, contexto?: Record<string, unknown>): Promise<{
+    especialistas: string[];
+    ferramentas?: string[];
     complexidade: 'baixa' | 'media' | 'alta';
   }> {
-    const prompt = `Você é o CEO da DEV.com, uma fábrica de software com 44 especialistas.
+    const prompt = `Analise esta demanda e identifique os especialistas necessários da DEV.com.
 
-Analise a seguinte demanda e decida:
-1. Qual o tipo de demanda (ex: "módulo de vendas", "integração", "arquitetura")
-2. Quais especialistas devem ser consultados (máximo 6)
-3. Qual a complexidade (baixa, média, alta)
+Demanda: "${mensagem}"
+${contexto ? `Contexto: ${JSON.stringify(contexto)}` : ''}
 
-DEMANDA: "${mensagem}"
+Especialistas disponíveis:
+${Object.values(ESPECIALISTAS_MAP).map(e => `- ${e.id}: ${e.nome} (${e.foco})`).join('\n')}
 
-ESPECIALISTAS DISPONÍVEIS:
-- ceo, cpo, guardiao, scrum-master (Estratégia)
-- vendas, marketplaces, omnichannel, ecommerce, crm-cs (Comercial)
-- cfo, tributario, economista, pricing (Financeiro)
-- logistica, compras, estoque (Operações)
-- bi, ga4, gtm, ia-automacoes, data-engineer (Dados)
-- cto, frontend, backend, devops, github-cloudflare, seguranca, infra, dba, mobile (Técnica)
-- seo, copywriter, email-marketing, social-media, video (Marketing)
-- ux-ui, ux-writer, branding, suporte-cx, onboarding, tech-writer (Experiência)
-- advogado (Jurídico)
-- rh-people (People)
-- qa-processos (Qualidade)
-
-Responda APENAS em JSON válido:
+Responda em JSON:
 {
-  "tipoDemanda": "string",
-  "especialistasRecomendados": ["id1", "id2", ...],
+  "especialistas": ["id1", "id2", ...], // máximo 6
+  "ferramentas": ["ferramenta1", ...], // se aplicável
   "complexidade": "baixa" | "media" | "alta"
 }`;
 
-    const response = await this.env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 500
-    });
-
     try {
-      const text = (response as any).response || '';
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-    } catch (e) {
-      console.error('Error parsing analysis:', e);
-    }
+      const response = await this.env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 500
+      }) as { response: string };
 
-    // Fallback: basic analysis based on keywords
-    return this.analiseBasica(mensagem);
+      const parsed = JSON.parse(response.response);
+      return {
+        especialistas: parsed.especialistas?.slice(0, 6) || ['ceo', 'cpo'],
+        ferramentas: parsed.ferramentas || [],
+        complexidade: parsed.complexidade || 'media'
+      };
+    } catch {
+      return { especialistas: ['ceo', 'cpo'], complexidade: 'media' };
+    }
   }
 
-  private analiseBasica(mensagem: string): {
-    tipoDemanda: string;
-    especialistasRecomendados: EspecialistaId[];
-    complexidade: 'baixa' | 'media' | 'alta';
-  } {
-    const msg = mensagem.toLowerCase();
-    
-    // Check for template matches
-    for (const template of MESAS_TEMPLATES) {
-      if (msg.includes(template.caso.toLowerCase()) || 
-          template.descricao.toLowerCase().split(' ').some(word => msg.includes(word))) {
-        return {
-          tipoDemanda: template.caso,
-          especialistasRecomendados: template.especialistas,
-          complexidade: template.especialistas.length > 4 ? 'alta' : 'media'
-        };
-      }
-    }
-    
-    // Default: CEO + CPO + CTO
-    return {
-      tipoDemanda: 'Consulta geral',
-      especialistasRecomendados: ['ceo', 'cpo', 'cto'],
-      complexidade: 'baixa'
-    };
-  }
-
-  // ============================================================================
-  // Create Mesa
-  // ============================================================================
-  private criarMesa(especialistas: EspecialistaId[], tipoDemanda: string): Mesa {
+  private async criarMesa(especialistasIds: string[]): Promise<Mesa> {
+    const id = crypto.randomUUID();
     const mesa: Mesa = {
-      id: crypto.randomUUID(),
-      nome: `Mesa: ${tipoDemanda}`,
-      descricao: `Mesa criada automaticamente para: ${tipoDemanda}`,
-      especialistas,
-      criado_em: new Date().toISOString(),
-      atualizado_em: new Date().toISOString()
+      id,
+      nome: `Mesa ${new Date().toISOString().slice(0, 10)}`,
+      especialistas: especialistasIds,
+      contexto: ''
     };
-    
-    this.state.mesasAtivas.set(mesa.id, mesa);
+    this.mesasAtivas.set(id, mesa);
     return mesa;
   }
 
-  // ============================================================================
-  // Handle Mesa Creation
-  // ============================================================================
-  private async handleMesa(request: Request): Promise<Response> {
-    const { demanda, especialistas } = await request.json() as any;
-    
-    let especialistasFinais: EspecialistaId[];
-    
-    if (especialistas && especialistas.length > 0) {
-      especialistasFinais = especialistas;
-    } else {
-      const analise = await this.analisarDemanda(demanda);
-      especialistasFinais = analise.especialistasRecomendados;
-    }
-    
-    const mesa = this.criarMesa(especialistasFinais, demanda);
-    
-    return Response.json({
-      mesa,
-      especialistas: especialistasFinais.map(id => ({
-        id,
-        ...ESPECIALISTAS_MAP[id] ? {
-          nome: ESPECIALISTAS_MAP[id].nome,
-          emoji: ESPECIALISTAS_MAP[id].emoji,
-          foco: ESPECIALISTAS_MAP[id].foco
-        } : {}
-      }))
-    });
-  }
-
-  // ============================================================================
-  // Invoke Specialists in Parallel
-  // ============================================================================
   private async invocarEspecialistas(
-    especialistas: EspecialistaId[],
-    mensagem: string,
-    projetoId?: string
-  ): Promise<ContribuicaoEspecialista[]> {
-    const contribuicoes = await Promise.all(
-      especialistas.map(async (especialistaId) => {
-        try {
-          // Get specialist info
-          const especialista = ESPECIALISTAS_MAP[especialistaId];
-          if (!especialista) {
-            return {
-              especialista: especialistaId,
-              contribuicao: `[Especialista ${especialistaId} não configurado]`,
-              ferramentas_usadas: [],
-              confianca: 0
-            };
-          }
-          
-          // Call AI with specialist's system prompt
-          const response = await this.env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-            messages: [
-              { role: 'system', content: especialista.systemPrompt },
-              { role: 'user', content: mensagem }
-            ],
-            max_tokens: 1000
-          });
-          
-          return {
-            especialista: especialistaId,
-            contribuicao: (response as any).response || '[Sem resposta]',
-            ferramentas_usadas: [],
-            confianca: 0.85
-          };
-          
-        } catch (error) {
-          console.error(`Error invoking ${especialistaId}:`, error);
-          return {
-            especialista: especialistaId,
-            contribuicao: `[Erro ao consultar especialista]`,
-            ferramentas_usadas: [],
-            confianca: 0
-          };
-        }
-      })
-    );
-    
+    mesa: Mesa, 
+    mensagem: string, 
+    contexto?: Record<string, unknown>
+  ): Promise<{ especialista: string; contribuicao: string }[]> {
+    const contribuicoes: { especialista: string; contribuicao: string }[] = [];
+
+    for (const espId of mesa.especialistas) {
+      const especialista = ESPECIALISTAS_MAP[espId];
+      if (!especialista) continue;
+
+      try {
+        const prompt = `${especialista.systemPrompt}
+
+${CULTURA_EQUIPE}
+
+${CHECKPOINTS}
+
+---
+DEMANDA DO CLIENTE: ${mensagem}
+${contexto ? `CONTEXTO: ${JSON.stringify(contexto)}` : ''}
+
+Responda como ${especialista.nome}, focando em ${especialista.foco}.
+Seja objetivo e prático.`;
+
+        const response = await this.env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 1000
+        }) as { response: string };
+
+        contribuicoes.push({
+          especialista: especialista.nome,
+          contribuicao: response.response
+        });
+      } catch (error) {
+        console.error(`Erro ao invocar ${espId}:`, error);
+      }
+    }
+
     return contribuicoes;
   }
 
-  // ============================================================================
-  // Synthesize Responses
-  // ============================================================================
   private async sintetizarRespostas(
     mensagemOriginal: string,
-    contribuicoes: ContribuicaoEspecialista[]
+    contribuicoes: { especialista: string; contribuicao: string }[],
+    analise: { complexidade: string }
   ): Promise<string> {
-    const contribuicoesTexto = contribuicoes
-      .map(c => {
-        const esp = ESPECIALISTAS_MAP[c.especialista];
-        return `**${esp?.emoji || '👤'} ${esp?.nome || c.especialista}:**\n${c.contribuicao}`;
-      })
-      .join('\n\n---\n\n');
+    const prompt = `Você é o CEO da DEV.com, sintetizando as contribuições dos especialistas.
 
-    const prompt = `Você é o Moderador de Mesa da DEV.com.
-
-Sua tarefa é sintetizar as contribuições dos especialistas em uma resposta unificada e coerente.
-
-DEMANDA ORIGINAL: "${mensagemOriginal}"
+DEMANDA ORIGINAL: ${mensagemOriginal}
 
 CONTRIBUIÇÕES DOS ESPECIALISTAS:
-${contribuicoesTexto}
+${contribuicoes.map(c => `### ${c.especialista}\n${c.contribuicao}`).join('\n\n')}
 
-INSTRUÇÕES:
-1. Sintetize as contribuições em uma resposta clara e organizada
-2. Destaque pontos de consenso e divergência (se houver)
-3. Organize por temas/áreas quando fizer sentido
-4. Inclua próximos passos sugeridos
-5. Mantenha a personalidade e emojis dos especialistas quando relevante
+Sintetize em uma resposta unificada e coerente para o cliente.
+- Use linguagem clara e objetiva
+- Destaque decisões importantes
+- Indique próximos passos se aplicável
+- Mantenha tom profissional mas acessível`;
 
-Formate a resposta de forma profissional mas acessível.`;
+    try {
+      const response = await this.env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2000
+      }) as { response: string };
 
-    const response = await this.env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 2000
-    });
-
-    return (response as any).response || contribuicoesTexto;
-  }
-
-  // ============================================================================
-  // Extract Next Steps
-  // ============================================================================
-  private extrairProximosPassos(resposta: string): string[] {
-    const linhas = resposta.split('\n');
-    const passos: string[] = [];
-    
-    let emSecaoPassos = false;
-    for (const linha of linhas) {
-      if (linha.toLowerCase().includes('próximo') || linha.toLowerCase().includes('passo')) {
-        emSecaoPassos = true;
-      }
-      if (emSecaoPassos && (linha.startsWith('-') || linha.startsWith('•') || linha.match(/^\d+\./))) {
-        passos.push(linha.replace(/^[-•\d.]\s*/, '').trim());
-      }
+      return response.response;
+    } catch {
+      return contribuicoes.map(c => `**${c.especialista}:** ${c.contribuicao}`).join('\n\n');
     }
-    
-    return passos.slice(0, 5); // Max 5 steps
   }
 
-  // ============================================================================
-  // WebSocket Handler for Real-time Chat
-  // ============================================================================
-  private async handleWebSocket(request: Request): Promise<Response> {
+  private async extrairProximosPassos(
+    resposta: string,
+    contribuicoes: { especialista: string; contribuicao: string }[]
+  ): Promise<string[]> {
+    const prompt = `Baseado nesta resposta e contribuições, liste os próximos passos práticos:
+
+${resposta}
+
+Retorne um array JSON de strings com os próximos passos (máximo 5):
+["passo 1", "passo 2", ...]`;
+
+    try {
+      const response = await this.env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 500
+      }) as { response: string };
+
+      return JSON.parse(response.response);
+    } catch {
+      return ['Aguardar aprovação do cliente', 'Detalhar próxima fase'];
+    }
+  }
+
+  private async salvarConversa(
+    projetoId: string,
+    mensagem: string,
+    resposta: string,
+    mesa: Mesa
+  ): Promise<void> {
+    const conversaId = crypto.randomUUID();
+    const mensagemId = crypto.randomUUID();
+    const respostaId = crypto.randomUUID();
+
+    try {
+      await this.env.DB.batch([
+        this.env.DB.prepare(
+          'INSERT INTO conversas (id, projeto_id, mesa_id, titulo) VALUES (?, ?, ?, ?)'
+        ).bind(conversaId, projetoId, mesa.id, mensagem.slice(0, 100)),
+        this.env.DB.prepare(
+          'INSERT INTO mensagens (id, conversa_id, role, content) VALUES (?, ?, ?, ?)'
+        ).bind(mensagemId, conversaId, 'user', mensagem),
+        this.env.DB.prepare(
+          'INSERT INTO mensagens (id, conversa_id, role, content) VALUES (?, ?, ?, ?)'
+        ).bind(respostaId, conversaId, 'assistant', resposta)
+      ]);
+    } catch (error) {
+      console.error('Erro ao salvar conversa:', error);
+    }
+  }
+
+  private async handleCriarMesa(request: Request): Promise<Response> {
+    const { nome, especialistas } = await request.json() as {
+      nome: string;
+      especialistas: string[];
+    };
+
+    const mesa = await this.criarMesa(especialistas);
+    mesa.nome = nome;
+
+    return new Response(JSON.stringify(mesa), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  private handleWebSocket(request: Request): Response {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
-    
+
     this.ctx.acceptWebSocket(server);
-    
+
     return new Response(null, {
       status: 101,
       webSocket: client
     });
   }
 
-  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     try {
       const data = JSON.parse(message as string);
       
       if (data.type === 'chat') {
-        // Process message through orchestrator
         const response = await this.handleChat(new Request('http://internal/chat', {
           method: 'POST',
           body: JSON.stringify(data.payload)
@@ -362,16 +299,12 @@ Formate a resposta de forma profissional mas acessível.`;
         const result = await response.json();
         ws.send(JSON.stringify({ type: 'response', payload: result }));
       }
-      
     } catch (error) {
-      ws.send(JSON.stringify({ 
-        type: 'error', 
-        payload: { message: 'Error processing message' }
-      }));
+      ws.send(JSON.stringify({ type: 'error', message: 'Erro ao processar mensagem' }));
     }
   }
 
-  async webSocketClose(ws: WebSocket, code: number, reason: string) {
-    console.log(`WebSocket closed: ${code} - ${reason}`);
+  async webSocketClose(): Promise<void> {
+    // Cleanup se necessário
   }
 }
