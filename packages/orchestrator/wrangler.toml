@@ -2,38 +2,44 @@
 # DEV.com Orchestrator - Cloudflare Workers Configuration
 # ============================================================================
 
-name = "dev-com-orchestrator"
+name = "DEVcom-orchestrator"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Account ID
+account_id = "f14d821b52a4f6ecbad7fb0e0afba8e5"
+
 # ============================================================================
-# Workers AI
+# Workers AI (via AI Gateway)
 # ============================================================================
 [ai]
 binding = "AI"
+
+# AI Gateway endpoint
+# https://gateway.ai.cloudflare.com/v1/f14d821b52a4f6ecbad7fb0e0afba8e5/devcom-ai-gateway
 
 # ============================================================================
 # D1 Database
 # ============================================================================
 [[d1_databases]]
 binding = "DB"
-database_name = "dev-com-db"
-database_id = "placeholder-update-after-creation"
+database_name = "DEVcom-database"
+database_id = "8cb74e46-ee62-4a66-b3a1-596d9ebd5a7e"
 
 # ============================================================================
 # R2 Storage
 # ============================================================================
 [[r2_buckets]]
 binding = "STORAGE"
-bucket_name = "dev-com-storage"
+bucket_name = "devcom-storage"
 
 # ============================================================================
 # KV Namespace
 # ============================================================================
 [[kv_namespaces]]
 binding = "CACHE"
-id = "placeholder-update-after-creation"
+id = "5706642392dc4af1ba7eef4a3a0e2322"
 
 # ============================================================================
 # Durable Objects
