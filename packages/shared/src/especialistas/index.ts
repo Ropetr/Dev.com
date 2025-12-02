@@ -1,192 +1,119 @@
 // ============================================================================
-// DEV.com - Export de todos os 44 Especialistas
+// DEV.com - Índice de Especialistas
 // ============================================================================
 
-// Estratégia & Produto
-export { CEO, CPO, GUARDIAO, SCRUM_MASTER } from './estrategia-produto';
+import { Especialista, Mesa } from '../types';
 
-// Comercial & Clientes (exportar quando criar)
-export { VENDAS, MARKETPLACES, OMNICHANNEL, ECOMMERCE, CRM_CS } from './comercial-clientes';
+// Importar todos os especialistas
+import { CEO, CPO, GUARDIAO, SCRUM_MASTER } from './estrategia-produto';
+import { VENDAS, MARKETPLACES, OMNICHANNEL, ECOMMERCE, CRM_CS } from './comercial-clientes';
+import { CFO, TRIBUTARIO, ECONOMISTA, PRICING } from './financeiro-fiscal';
+import { LOGISTICA, COMPRAS, ESTOQUE } from './operacoes-logistica';
+import { BI, GA4, GTM, IA_AUTOMACOES, DATA_ENGINEER } from './dados-ia';
+import { CTO, FRONTEND, BACKEND, DEVOPS, GITHUB_CF, SEGURANCA, INFRA, DBA, MOBILE } from './tecnica';
+import { SEO, COPYWRITER, EMAIL_MARKETING, SOCIAL_MEDIA, VIDEO } from './marketing-conteudo';
+import { UX_UI, UX_WRITER, BRANDING, SUPORTE_CX, ONBOARDING, TECH_WRITER } from './experiencia';
+import { ADVOGADO } from './juridico';
+import { RH_PEOPLE } from './people';
+import { QA_PROCESSOS } from './qualidade';
 
-// Financeiro & Fiscal (exportar quando criar)
-export { CFO, TRIBUTARIO, ECONOMISTA, PRICING } from './financeiro-fiscal';
-
-// Operações & Logística
-export { LOGISTICA, COMPRAS, ESTOQUE } from './operacoes-logistica';
-
-// Dados & IA
-export { BI, GA4, GTM, IA_AUTOMACOES, DATA_ENGINEER } from './dados-ia';
-
-// Técnica
-export { CTO, FRONTEND, BACKEND, DEVOPS, GITHUB_CLOUDFLARE, SEGURANCA, INFRA, DBA, MOBILE } from './tecnica';
-
-// Marketing & Conteúdo (exportar quando criar)
-export { SEO, COPYWRITER, EMAIL_MARKETING, SOCIAL_MEDIA, VIDEO } from './marketing-conteudo';
-
-// Experiência (exportar quando criar)
-export { UX_UI, UX_WRITER, BRANDING, SUPORTE_CX, ONBOARDING, TECH_WRITER } from './experiencia';
-
-// Jurídico (exportar quando criar)
-export { ADVOGADO } from './juridico';
-
-// People (exportar quando criar)
-export { RH_PEOPLE } from './people';
-
-// Qualidade (exportar quando criar)
-export { QA_PROCESSOS } from './qualidade';
-
-// ----------------------------------------------------------------------------
-// Mapa de todos os especialistas por ID
-// ----------------------------------------------------------------------------
-
-import type { Especialista, EspecialistaId } from '../types';
-import * as estrategia from './estrategia-produto';
-import * as operacoes from './operacoes-logistica';
-import * as dados from './dados-ia';
-import * as tecnica from './tecnica';
-
-export const ESPECIALISTAS_MAP: Record<EspecialistaId, Especialista> = {
+// Lista completa de especialistas
+export const ESPECIALISTAS: Especialista[] = [
   // Estratégia & Produto
-  'ceo': estrategia.CEO,
-  'cpo': estrategia.CPO,
-  'guardiao': estrategia.GUARDIAO,
-  'scrum-master': estrategia.SCRUM_MASTER,
-  
-  // Comercial & Clientes (placeholder até criar)
-  'vendas': estrategia.CEO, // placeholder
-  'marketplaces': estrategia.CEO,
-  'omnichannel': estrategia.CEO,
-  'ecommerce': estrategia.CEO,
-  'crm-cs': estrategia.CEO,
-  
-  // Financeiro & Fiscal (placeholder até criar)
-  'cfo': estrategia.CEO,
-  'tributario': estrategia.CEO,
-  'economista': estrategia.CEO,
-  'pricing': estrategia.CEO,
-  
+  CEO, CPO, GUARDIAO, SCRUM_MASTER,
+  // Comercial & Clientes
+  VENDAS, MARKETPLACES, OMNICHANNEL, ECOMMERCE, CRM_CS,
+  // Financeiro & Fiscal
+  CFO, TRIBUTARIO, ECONOMISTA, PRICING,
   // Operações & Logística
-  'logistica': operacoes.LOGISTICA,
-  'compras': operacoes.COMPRAS,
-  'estoque': operacoes.ESTOQUE,
-  
+  LOGISTICA, COMPRAS, ESTOQUE,
   // Dados & IA
-  'bi': dados.BI,
-  'ga4': dados.GA4,
-  'gtm': dados.GTM,
-  'ia-automacoes': dados.IA_AUTOMACOES,
-  'data-engineer': dados.DATA_ENGINEER,
-  
+  BI, GA4, GTM, IA_AUTOMACOES, DATA_ENGINEER,
   // Técnica
-  'cto': tecnica.CTO,
-  'frontend': tecnica.FRONTEND,
-  'backend': tecnica.BACKEND,
-  'devops': tecnica.DEVOPS,
-  'github-cloudflare': tecnica.GITHUB_CLOUDFLARE,
-  'seguranca': tecnica.SEGURANCA,
-  'infra': tecnica.INFRA,
-  'dba': tecnica.DBA,
-  'mobile': tecnica.MOBILE,
-  
-  // Marketing & Conteúdo (placeholder até criar)
-  'seo': estrategia.CEO,
-  'copywriter': estrategia.CEO,
-  'email-marketing': estrategia.CEO,
-  'social-media': estrategia.CEO,
-  'video': estrategia.CEO,
-  
-  // Experiência (placeholder até criar)
-  'ux-ui': estrategia.CEO,
-  'ux-writer': estrategia.CEO,
-  'branding': estrategia.CEO,
-  'suporte-cx': estrategia.CEO,
-  'onboarding': estrategia.CEO,
-  'tech-writer': estrategia.CEO,
-  
-  // Jurídico (placeholder até criar)
-  'advogado': estrategia.CEO,
-  
-  // People (placeholder até criar)
-  'rh-people': estrategia.CEO,
-  
-  // Qualidade (placeholder até criar)
-  'qa-processos': estrategia.CEO,
-};
+  CTO, FRONTEND, BACKEND, DEVOPS, GITHUB_CF, SEGURANCA, INFRA, DBA, MOBILE,
+  // Marketing & Conteúdo
+  SEO, COPYWRITER, EMAIL_MARKETING, SOCIAL_MEDIA, VIDEO,
+  // Experiência
+  UX_UI, UX_WRITER, BRANDING, SUPORTE_CX, ONBOARDING, TECH_WRITER,
+  // Jurídico
+  ADVOGADO,
+  // People
+  RH_PEOPLE,
+  // Qualidade
+  QA_PROCESSOS
+];
 
-// ----------------------------------------------------------------------------
-// Mesas pré-configuradas por tipo de demanda
-// ----------------------------------------------------------------------------
+// Mapa para acesso rápido por ID
+export const ESPECIALISTAS_MAP: Record<string, Especialista> = {};
+ESPECIALISTAS.forEach(esp => {
+  ESPECIALISTAS_MAP[esp.id] = esp;
+});
 
-import type { MesaTemplate } from '../types';
-
-export const MESAS_TEMPLATES: MesaTemplate[] = [
+// Templates de mesas pré-configuradas
+export const MESAS_TEMPLATES: Mesa[] = [
   {
-    caso: 'Novo módulo de vendas',
-    especialistas: ['cpo', 'vendas', 'pricing', 'ux-ui', 'backend', 'qa-processos'],
-    descricao: 'Para criar módulos relacionados a vendas, orçamentos, pedidos'
+    id: 'novo-modulo-vendas',
+    nome: 'Novo Módulo de Vendas',
+    especialistas: ['cpo', 'vendas', 'pricing', 'ux-ui', 'backend', 'qa-processos']
   },
   {
-    caso: 'Integração com marketplace',
-    especialistas: ['marketplaces', 'cto', 'backend', 'data-engineer'],
-    descricao: 'Para integrar com Mercado Livre, Amazon, Shopee, etc.'
+    id: 'integracao-marketplace',
+    nome: 'Integração com Marketplace',
+    especialistas: ['marketplaces', 'cto', 'backend', 'data-engineer']
   },
   {
-    caso: 'Otimização de estoque',
-    especialistas: ['estoque', 'logistica', 'compras', 'bi', 'dba'],
-    descricao: 'Para módulos de estoque, inventário, WMS'
+    id: 'otimizacao-estoque',
+    nome: 'Otimização de Estoque',
+    especialistas: ['estoque', 'logistica', 'compras', 'bi', 'dba']
   },
   {
-    caso: 'Lançamento de e-commerce',
-    especialistas: ['ecommerce', 'seo', 'copywriter', 'frontend', 'cto'],
-    descricao: 'Para criar ou otimizar loja virtual'
+    id: 'lancamento-ecommerce',
+    nome: 'Lançamento E-commerce',
+    especialistas: ['ecommerce', 'seo', 'copywriter', 'frontend', 'cto']
   },
   {
-    caso: 'Compliance LGPD',
-    especialistas: ['advogado', 'seguranca', 'dba', 'cto'],
-    descricao: 'Para requisitos de privacidade e segurança'
+    id: 'compliance-lgpd',
+    nome: 'Compliance LGPD',
+    especialistas: ['advogado', 'seguranca', 'dba', 'cto']
   },
   {
-    caso: 'App mobile',
-    especialistas: ['mobile', 'logistica', 'ux-ui', 'backend', 'devops'],
-    descricao: 'Para criar apps de motorista, vendedor, cliente'
+    id: 'app-mobile',
+    nome: 'App Mobile',
+    especialistas: ['mobile', 'logistica', 'ux-ui', 'backend', 'devops']
   },
   {
-    caso: 'Dashboard executivo',
-    especialistas: ['bi', 'cfo', 'cpo', 'frontend', 'dba'],
-    descricao: 'Para criar painéis gerenciais e KPIs'
+    id: 'dashboard-executivo',
+    nome: 'Dashboard Executivo',
+    especialistas: ['bi', 'cfo', 'cpo', 'frontend', 'dba']
   },
   {
-    caso: 'Automação de processos',
-    especialistas: ['ia-automacoes', 'backend', 'cpo', 'qa-processos'],
-    descricao: 'Para automatizar tarefas repetitivas'
+    id: 'automacao-processos',
+    nome: 'Automação de Processos',
+    especialistas: ['ia-automacoes', 'backend', 'cpo', 'qa-processos']
   },
   {
-    caso: 'Definição de arquitetura',
-    especialistas: ['ceo', 'cto', 'devops', 'seguranca', 'dba'],
-    descricao: 'Para decisões técnicas de alto nível'
+    id: 'definicao-arquitetura',
+    nome: 'Definição de Arquitetura',
+    especialistas: ['ceo', 'cto', 'devops', 'seguranca', 'dba']
   },
   {
-    caso: 'Planejamento de sprint',
-    especialistas: ['scrum-master', 'cpo', 'cto', 'frontend', 'backend'],
-    descricao: 'Para organizar trabalho em sprints'
+    id: 'planejamento-sprint',
+    nome: 'Planejamento de Sprint',
+    especialistas: ['scrum-master', 'cpo', 'cto', 'frontend', 'backend']
   }
 ];
 
-// ----------------------------------------------------------------------------
-// Helper para buscar especialista
-// ----------------------------------------------------------------------------
-
-export function getEspecialista(id: EspecialistaId): Especialista | undefined {
-  return ESPECIALISTAS_MAP[id];
-}
-
-export function getEspecialistasPorDiretoria(diretoria: string): Especialista[] {
-  return Object.values(ESPECIALISTAS_MAP).filter(e => e.diretoria === diretoria);
-}
-
-export function getMesaTemplate(caso: string): MesaTemplate | undefined {
-  return MESAS_TEMPLATES.find(m => 
-    m.caso.toLowerCase().includes(caso.toLowerCase()) ||
-    m.descricao.toLowerCase().includes(caso.toLowerCase())
-  );
-}
+// Re-export individuais
+export {
+  CEO, CPO, GUARDIAO, SCRUM_MASTER,
+  VENDAS, MARKETPLACES, OMNICHANNEL, ECOMMERCE, CRM_CS,
+  CFO, TRIBUTARIO, ECONOMISTA, PRICING,
+  LOGISTICA, COMPRAS, ESTOQUE,
+  BI, GA4, GTM, IA_AUTOMACOES, DATA_ENGINEER,
+  CTO, FRONTEND, BACKEND, DEVOPS, GITHUB_CF, SEGURANCA, INFRA, DBA, MOBILE,
+  SEO, COPYWRITER, EMAIL_MARKETING, SOCIAL_MEDIA, VIDEO,
+  UX_UI, UX_WRITER, BRANDING, SUPORTE_CX, ONBOARDING, TECH_WRITER,
+  ADVOGADO,
+  RH_PEOPLE,
+  QA_PROCESSOS
+};
