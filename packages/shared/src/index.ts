@@ -1,15 +1,12 @@
 // ============================================================================
-// DEV.com Shared Package - Main Export
+// DEV.com Shared - Main Export
 // ============================================================================
 
 // Types
 export * from './types';
 
+// Cultura e Regras
+export * from './cultura';
+
 // Especialistas
 export * from './especialistas';
-
-// Utils (quando criar)
-// export * from './utils';
-
-// Prompts base (quando criar)
-// export * from './prompts';
