@@ -4,25 +4,22 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { Env } from '@dev.com/shared';
 import { OrchestratorDO } from './orchestrator';
 import { AgentDO } from './agent';
-import type { Env } from '@dev.com/shared/types';
 
 // Export Durable Objects
 export { OrchestratorDO, AgentDO };
 
-// Create Hono app
 const app = new Hono<{ Bindings: Env }>();
 
 // Middleware
 app.use('*', cors());
 
-// ============================================================================
-// Health Check
-// ============================================================================
+// Health check
 app.get('/', (c) => {
   return c.json({
-    name: 'DEV.com Multi-Agent System',
+    name: 'DEV.com Orchestrator',
     version: '3.0.0',
     status: 'online',
     especialistas: 44,
@@ -32,6 +29,9 @@ app.get('/', (c) => {
       mesa: 'POST /api/mesa',
       especialistas: 'GET /api/especialistas',
       projeto: 'GET /api/projeto/:id',
+      templates: 'GET /api/mesas/templates',
+      agent: 'POST /api/agent/:especialista',
+      ws: 'GET /ws'
     }
   });
 });
@@ -40,124 +40,140 @@ app.get('/', (c) => {
 // API Routes
 // ============================================================================
 
-// Chat endpoint - main entry point for conversations
+// Chat principal - envia mensagem e recebe resposta orquestrada
 app.post('/api/chat', async (c) => {
-  const body = await c.req.json();
-  const { mensagem, projeto_id, mesa_id } = body;
+  try {
+    const body = await c.req.json();
+    const { mensagem, projeto_id, mesa_id, contexto } = body;
 
-  if (!mensagem) {
-    return c.json({ error: 'Mensagem é obrigatória' }, 400);
+    if (!mensagem) {
+      return c.json({ error: 'Mensagem é obrigatória' }, 400);
+    }
+
+    // Get or create Orchestrator DO instance
+    const id = c.env.ORCHESTRATOR.idFromName(projeto_id || 'default');
+    const orchestrator = c.env.ORCHESTRATOR.get(id);
+
+    // Forward request to Orchestrator
+    const response = await orchestrator.fetch(new Request('http://internal/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mensagem, projeto_id, mesa_id, contexto })
+    }));
+
+    return new Response(response.body, {
+      status: response.status,
+      headers: response.headers
+    });
+  } catch (error) {
+    console.error('Erro no chat:', error);
+    return c.json({ error: 'Erro interno no processamento' }, 500);
   }
-
-  // Get orchestrator Durable Object
-  const id = c.env.ORCHESTRATOR_DO.idFromName('main');
-  const stub = c.env.ORCHESTRATOR_DO.get(id);
-
-  // Forward request to orchestrator
-  const response = await stub.fetch(new Request('http://internal/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mensagem, projeto_id, mesa_id })
-  }));
-
-  return response;
 });
 
-// Create/get mesa de especialistas
+// Criar mesa de especialistas
 app.post('/api/mesa', async (c) => {
-  const body = await c.req.json();
-  const { demanda, especialistas } = body;
+  try {
+    const body = await c.req.json();
+    const { nome, especialistas, projeto_id } = body;
 
-  const id = c.env.ORCHESTRATOR_DO.idFromName('main');
-  const stub = c.env.ORCHESTRATOR_DO.get(id);
+    if (!nome || !especialistas || !Array.isArray(especialistas)) {
+      return c.json({ error: 'Nome e lista de especialistas são obrigatórios' }, 400);
+    }
 
-  const response = await stub.fetch(new Request('http://internal/mesa', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ demanda, especialistas })
-  }));
+    const id = c.env.ORCHESTRATOR.idFromName(projeto_id || 'default');
+    const orchestrator = c.env.ORCHESTRATOR.get(id);
 
-  return response;
-});
+    const response = await orchestrator.fetch(new Request('http://internal/mesa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome, especialistas })
+    }));
 
-// List especialistas
-app.get('/api/especialistas', async (c) => {
-  const diretoria = c.req.query('diretoria');
-  
-  // Import especialistas map
-  const { ESPECIALISTAS_MAP, getEspecialistasPorDiretoria } = await import('@dev.com/shared/especialistas');
-  
-  if (diretoria) {
-    const lista = getEspecialistasPorDiretoria(diretoria);
-    return c.json({ especialistas: lista });
+    return new Response(response.body, {
+      status: response.status,
+      headers: response.headers
+    });
+  } catch (error) {
+    console.error('Erro ao criar mesa:', error);
+    return c.json({ error: 'Erro ao criar mesa' }, 500);
   }
-  
-  const lista = Object.values(ESPECIALISTAS_MAP).map(e => ({
-    id: e.id,
-    nome: e.nome,
-    diretoria: e.diretoria,
-    emoji: e.emoji,
-    foco: e.foco
-  }));
-  
-  return c.json({ especialistas: lista, total: lista.length });
 });
 
-// Get projeto
+// Listar especialistas
+app.get('/api/especialistas', async (c) => {
+  const { ESPECIALISTAS } = await import('@dev.com/shared');
+  return c.json({
+    total: ESPECIALISTAS.length,
+    especialistas: ESPECIALISTAS
+  });
+});
+
+// Obter projeto
 app.get('/api/projeto/:id', async (c) => {
   const projetoId = c.req.param('id');
   
-  // Query D1
-  const result = await c.env.DB.prepare(
-    'SELECT * FROM projetos WHERE id = ?'
-  ).bind(projetoId).first();
-  
-  if (!result) {
-    return c.json({ error: 'Projeto não encontrado' }, 404);
+  try {
+    const result = await c.env.DB.prepare(
+      'SELECT * FROM projetos WHERE id = ?'
+    ).bind(projetoId).first();
+
+    if (!result) {
+      return c.json({ error: 'Projeto não encontrado' }, 404);
+    }
+
+    return c.json(result);
+  } catch (error) {
+    console.error('Erro ao buscar projeto:', error);
+    return c.json({ error: 'Erro ao buscar projeto' }, 500);
   }
-  
-  return c.json({ projeto: result });
 });
 
-// List mesas templates
+// Templates de mesas pré-configuradas
 app.get('/api/mesas/templates', async (c) => {
-  const { MESAS_TEMPLATES } = await import('@dev.com/shared/especialistas');
-  return c.json({ templates: MESAS_TEMPLATES });
+  const { MESAS_TEMPLATES } = await import('@dev.com/shared');
+  return c.json({
+    total: MESAS_TEMPLATES.length,
+    templates: MESAS_TEMPLATES
+  });
 });
 
-// Invoke specific agent directly
+// Invocar agente específico
 app.post('/api/agent/:especialista', async (c) => {
-  const especialistaId = c.req.param('especialista');
-  const body = await c.req.json();
-  const { mensagem, contexto } = body;
+  try {
+    const especialistaId = c.req.param('especialista');
+    const body = await c.req.json();
 
-  // Get agent Durable Object
-  const id = c.env.AGENT_DO.idFromName(especialistaId);
-  const stub = c.env.AGENT_DO.get(id);
+    const id = c.env.AGENT.idFromName(especialistaId);
+    const agent = c.env.AGENT.get(id);
 
-  const response = await stub.fetch(new Request('http://internal/invoke', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mensagem, contexto })
-  }));
+    const response = await agent.fetch(new Request('http://internal/invoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }));
 
-  return response;
+    return new Response(response.body, {
+      status: response.status,
+      headers: response.headers
+    });
+  } catch (error) {
+    console.error('Erro ao invocar agente:', error);
+    return c.json({ error: 'Erro ao invocar agente' }, 500);
+  }
 });
 
-// ============================================================================
-// WebSocket endpoint for real-time chat
-// ============================================================================
+// WebSocket para chat em tempo real
 app.get('/ws', async (c) => {
   const upgradeHeader = c.req.header('Upgrade');
   if (upgradeHeader !== 'websocket') {
-    return c.text('Expected WebSocket', 400);
+    return c.text('Expected WebSocket', 426);
   }
 
-  const id = c.env.ORCHESTRATOR_DO.idFromName('main');
-  const stub = c.env.ORCHESTRATOR_DO.get(id);
-  
-  return stub.fetch(c.req.raw);
+  const id = c.env.ORCHESTRATOR.idFromName('ws-default');
+  const orchestrator = c.env.ORCHESTRATOR.get(id);
+
+  return orchestrator.fetch(c.req.raw);
 });
 
-// Export default
 export default app;
