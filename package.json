@@ -1,0 +1,43 @@
+{
+  "name": "dev.com",
+  "version": "3.0.0",
+  "private": true,
+  "description": "🏢 DEV.com - Fábrica de Software Virtual | Multi-Agent AI System",
+  "keywords": [
+    "ai",
+    "multi-agent",
+    "cloudflare",
+    "workers",
+    "durable-objects",
+    "llm"
+  ],
+  "author": "Planac",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ropetr/Dev.com.git"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "deploy": "turbo run deploy",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "db:migrate": "pnpm --filter orchestrator db:migrate && pnpm --filter agents db:migrate",
+    "db:seed": "pnpm --filter orchestrator db:seed",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "@types/node": "^20.10.0",
+    "turbo": "^2.3.0",
+    "typescript": "^5.3.0",
+    "wrangler": "^3.91.0"
+  }
+}
